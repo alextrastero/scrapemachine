@@ -1,0 +1,29 @@
+{
+  "name": "scrapemachine",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js",
+    "dry-run": "node index.js --dry-run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alextrastero/scrapemachine.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/alextrastero/scrapemachine/issues"
+  },
+  "homepage": "https://github.com/alextrastero/scrapemachine#readme",
+  "dependencies": {
+    "axios": "^1.9.0",
+    "cheerio": "^1.0.0",
+    "dotenv": "^16.5.0",
+    "nodemailer": "^7.0.0"
+  }
+}
