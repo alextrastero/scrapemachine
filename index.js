@@ -18,8 +18,8 @@ const config = {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASSWORD
     },
-    from: 'your-email@gmail.com', // Hardcoded sender
-    to: 'recipient@example.com', // Hardcoded recipient
+    from: 'doesntmatter@gmail.com', // Hardcoded sender
+    to: process.env.EMAIL_USER, // Hardcoded recipient
     subject: 'Website Update Notification' // Hardcoded subject
   }
 };
