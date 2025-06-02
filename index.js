@@ -53,10 +53,16 @@ async function scrapeWebsite() {
     const results = {};
     const requests = [];
 
-    // Get 8 days of data (today + 7 days ahead)
+    // Get 8 days of data (today + 7 days ahead), excluding weekends
     for (let i = 0; i < 8; i++) {
       const date = new Date();
       date.setDate(date.getDate() + i);
+      
+      // Skip weekends (Saturday = 6, Sunday = 0)
+      if (date.getDay() === 0 || date.getDay() === 6) {
+        continue;
+      }
+      
       const formattedDate = formatDate(date);
 
       const apiUrl = `${config.baseApiUrl}?idSC=${config.facilityId}&date=${formattedDate}&weekly=false`;
