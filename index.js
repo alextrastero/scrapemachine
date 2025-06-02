@@ -33,7 +33,6 @@ const config = {
     },
     from: 'doesntmatter@gmail.com', // Hardcoded sender
     to: process.env.EMAIL_USER, // Hardcoded recipient
-    subject: 'Website Update Notification' // Hardcoded subject
   }
 };
 
@@ -81,10 +80,10 @@ async function scrapeWebsite() {
     await Promise.all(requests);
 
     // Parse the combined API responses
-    const parsedData = parseApiResponse(results);
+    const { htmlContent, slotCount } = parseApiResponse(results);
 
     // Send email notification
-    return sendEmail(parsedData);
+    return sendEmail(htmlContent, slotCount);
   } catch (error) {
     console.error('Error in scrapeWebsite function:', error.message);
   }
@@ -94,6 +93,7 @@ async function scrapeWebsite() {
 function parseApiResponse(data) {
   try {
     const availableSlots = {};
+    let totalSlotCount = 0;
 
     // Process each day's data
     Object.keys(data).forEach(date => {
@@ -145,6 +145,7 @@ function parseApiResponse(data) {
                 end: endTime,
                 date: new Date(piece.ini).toISOString().split('T')[0] // YYYY-MM-DD
               });
+              totalSlotCount++;
             }
           });
         });
@@ -212,19 +213,19 @@ function parseApiResponse(data) {
       });
     }
 
-    return htmlContent;
+    return { htmlContent, slotCount: totalSlotCount };
   } catch (error) {
     console.error('Error parsing API response:', error.message);
-    return `<p>Error parsing API response: ${error.message}</p>`;
+    return { htmlContent: `<p>Error parsing API response: ${error.message}</p>`, slotCount: 0 };
   }
 }
 
 // Function to send email notification
-async function sendEmail(content) {
+async function sendEmail(content, slotCount) {
   const mailOptions = {
     from: config.email.from,
     to: config.email.to,
-    subject: config.email.subject,
+    subject: `${slotCount} free slots available`,
     html: `
       <h2>API Data Report</h2>
       <p><strong>Fetch Time:</strong> ${new Date().toISOString()}</p>
