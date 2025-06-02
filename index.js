@@ -266,7 +266,7 @@ async function sendEmail(content, slotCount) {
 
 // For GitHub Actions, just run once
 (async () => {
-  console.log(`Scraper started. Checking ${config.url}`);
+  console.log(`Scraper started. Checking ${config.baseApiUrl}`);
   await scrapeWebsite();
   console.log('Scrape completed');
 })();
