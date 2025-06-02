@@ -47,6 +47,47 @@ function formatDate(date) {
   return date.toISOString().split('T')[0];
 }
 
+// Function to fetch tournament table data
+async function scrapeTournamentData() {
+  try {
+    const tournamentUrl = 'https://www.todotorneos.com/torneo/torneoliga.php?&torneo=359392';
+    console.log(`Fetching tournament data from: ${tournamentUrl}`);
+
+    const response = await axios.get(tournamentUrl);
+    const $ = cheerio.load(response.data);
+
+    // Find the table with id "clasificacion"
+    const table = $('#clasificacion');
+    if (!table.length) {
+      console.log('Tournament table not found');
+      return '<p>Tournament table not available</p>';
+    }
+
+    let html = '<table border="1" cellpadding="5" style="border-collapse: collapse; width: 100%;">';
+
+    // Process table rows
+    table.find('tr').each((_, row) => {
+      const cells = $(row).find('td, th');
+      if (cells.length) { // amount of columns to add
+        html += '<tr>';
+        // Only take first 4 columns
+        for (let i = 0; i < 4; i++) {
+          const cellText = $(cells[i]).text().trim();
+          const tag = cells.eq(i).is('th') ? 'th' : 'td';
+          html += `<${tag}>${cellText}</${tag}>`;
+        }
+        html += '</tr>';
+      }
+    });
+
+    html += '</table><br>';
+    return html;
+  } catch (error) {
+    console.error('Error fetching tournament data:', error.message);
+    return '<p>Error fetching tournament data</p>';
+  }
+}
+
 // Function to fetch API data
 async function scrapeWebsite() {
   try {
@@ -57,12 +98,12 @@ async function scrapeWebsite() {
     for (let i = 0; i < 8; i++) {
       const date = new Date();
       date.setDate(date.getDate() + i);
-      
+
       // Skip weekends (Saturday = 6, Sunday = 0)
       if (date.getDay() === 0 || date.getDay() === 6) {
         continue;
       }
-      
+
       const formattedDate = formatDate(date);
 
       const apiUrl = `${config.baseApiUrl}?idSC=${config.facilityId}&date=${formattedDate}&weekly=false`;
@@ -88,8 +129,11 @@ async function scrapeWebsite() {
     // Parse the combined API responses
     const { htmlContent, slotCount } = parseApiResponse(results);
 
+    // Fetch tournament data
+    const tournamentHtml = await scrapeTournamentData();
+
     // Send email notification
-    return sendEmail(htmlContent, slotCount);
+    return sendEmail(htmlContent, slotCount, tournamentHtml);
   } catch (error) {
     console.error('Error in scrapeWebsite function:', error.message);
   }
@@ -168,7 +212,7 @@ function parseApiResponse(data) {
     let htmlContent = '';
 
     if (Object.keys(availableSlots).length === 0) {
-      htmlContent = '<p><strong>No available slots found matching your criteria.</strong></p>';
+      htmlContent = '<p><strong>No available slots found</strong></p>';
     } else {
       // Sort dates chronologically
       const sortedDates = Object.keys(availableSlots).sort();
@@ -227,29 +271,21 @@ function parseApiResponse(data) {
 }
 
 // Function to send email notification
-async function sendEmail(content, slotCount) {
+async function sendEmail(content, slotCount, tournamentData = '') {
   const mailOptions = {
     from: config.email.from,
     to: config.email.to,
     subject: `${slotCount} free slots available`,
     html: `
-      <h2>API Data Report</h2>
-      <p><strong>Fetch Time:</strong> ${new Date().toISOString()}</p>
-      <p><strong>API Source:</strong> ${config.baseApiUrl} (Facility ID: ${config.facilityId})</p>
-      <h3>Data:</h3>
-      <pre style="background-color: #f4f4f4; padding: 15px; border-radius: 5px; overflow: auto;">${content}</pre>
+      <h3>Available Slots:</h3>
+      <pre style="background-color: #f4f4f4; padding: 10px; overflow: auto;">${content}</pre>
+      <h3>Leaderboard:</h3>
+      <pre style="background-color: #f2f2f2; padding: 10px; overflow: auto;">${tournamentData}</pre>
     `
   };
 
-  // In dry-run mode, just log and save to tmp.html
+  // In dry-run mode, just save to tmp.html
   if (isDryRun) {
-    console.log('\n======= DRY RUN: EMAIL WOULD BE SENT =======\n');
-    console.log('From:', mailOptions.from);
-    console.log('To:', mailOptions.to);
-    console.log('Subject:', mailOptions.subject);
-    console.log('\nEmail Body Preview:');
-    console.log(mailOptions.html.substring(0, 500) + '...');
-
     // Save to tmp.html file
     try {
       fs.writeFileSync('tmp.html', mailOptions.html);
@@ -257,8 +293,6 @@ async function sendEmail(content, slotCount) {
     } catch (error) {
       console.error('Error saving to tmp.html:', error.message);
     }
-
-    console.log('\n==============================================\n');
     return;
   }
 
