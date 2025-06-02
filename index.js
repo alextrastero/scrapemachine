@@ -14,17 +14,17 @@ if (isDryRun) {
 const config = {
   baseApiUrl: 'https://api.sporttia.com/v7/timetable', // Base API URL
   facilityId: 3418, // Facility ID (idSC parameter)
-  blacklistFacilities: [
+  whitelistFacilities: [
     'Pista 1',
     'Pista 2',
     'Pista Cristal',
     // 'Pista San Pablo',
-  ], // Only include these facilities
+  ],
   whitelistedStartTimes: [
     '19:30',
     '21:00',
     // '22:30',
-  ], // Only include slots starting at these times
+  ],
   email: {
     service: 'gmail', // Email service (hardcoded)
     auth: {
@@ -107,7 +107,7 @@ function parseApiResponse(data) {
           const facilityName = column.facility.name;
 
           // Skip facilities not in the whitelist
-          if (!config.blacklistFacilities.includes(facilityName)) {
+          if (!config.whitelistFacilities.includes(facilityName)) {
             return;
           }
 
@@ -127,13 +127,13 @@ function parseApiResponse(data) {
               }
 
               // Format times for display
-              const formattedStartTime = startTimeObj.toLocaleTimeString('en-US', {
+              const formattedStartTime = startTimeObj.toLocaleTimeString(undefined, {
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: true
               });
 
-              const endTime = new Date(piece.end).toLocaleTimeString('en-US', {
+              const endTime = new Date(piece.end).toLocaleTimeString(undefined, {
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: true
@@ -190,7 +190,7 @@ function parseApiResponse(data) {
         // Create table with facility columns
         htmlContent += '<table border="1" cellpadding="5" style="border-collapse: collapse; width: 100%;">';
         htmlContent += '<tr>';
-        config.blacklistFacilities.forEach(facility => {
+        config.whitelistFacilities.forEach(facility => {
           htmlContent += `<th>${facility}</th>`;
         });
         htmlContent += '</tr>';
@@ -199,7 +199,7 @@ function parseApiResponse(data) {
         const sortedTimes = Object.keys(timeSlots).sort();
         sortedTimes.forEach(time => {
           htmlContent += '<tr>';
-          config.blacklistFacilities.forEach(facility => {
+          config.whitelistFacilities.forEach(facility => {
             if (timeSlots[time].includes(facility)) {
               htmlContent += `<td>${time}</td>`;
             } else {
