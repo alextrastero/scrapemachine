@@ -18,11 +18,14 @@ const config = {
     'Pista 1',
     'Pista 2',
     'Pista Cristal',
-    // 'Pista San Pablo',
+    'Pista San Pablo',
   ],
   whitelistedStartTimes: [
+    '19:00',
     '19:30',
+    '20:30',
     '21:00',
+    '22:00',
     // '22:30',
   ],
   email: {
