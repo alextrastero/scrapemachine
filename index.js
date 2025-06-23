@@ -160,7 +160,7 @@ function parseApiResponse(data) {
           const facilityName = column.facility.name;
 
           // Skip facilities not in the whitelist
-          if (!config.whitelistFacilities.includes(facilityName)) {
+          if (!config.whitelistFacilities.includes(facilityName) && !isDryRun) {
             return;
           }
 
@@ -175,7 +175,7 @@ function parseApiResponse(data) {
               const startTime = `${startTimeHours}:${startTimeMinutes}`;
 
               // Skip if start time is not in the whitelist
-              if (!config.whitelistedStartTimes.includes(startTime)) {
+              if (!config.whitelistedStartTimes.includes(startTime) && !isDryRun) {
                 return;
               }
 
