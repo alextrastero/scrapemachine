@@ -53,7 +53,7 @@ function formatDate(date) {
 // Function to fetch tournament table data
 async function scrapeTournamentData() {
   try {
-    const tournamentUrl = 'https://www.todotorneos.com/torneo/torneoliga.php?&torneo=359392';
+    const tournamentUrl = 'https://www.todotorneos.com/torneo/torneoliga.php?&torneo=363177';
     console.log(`Fetching tournament data from: ${tournamentUrl}`);
 
     const response = await axios.get(tournamentUrl);
