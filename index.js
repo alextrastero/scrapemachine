@@ -18,7 +18,7 @@ const config = {
     'Pista 1',
     'Pista 2',
     'Pista Cristal',
-    'Pista San Pablo',
+    // 'Pista San Pablo',
   ],
   whitelistedStartTimes: [
     '19:00',
