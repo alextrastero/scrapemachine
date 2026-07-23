@@ -31,7 +31,8 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASS }}
           SPORTTIA_USER_ID: ${{ secrets.SPORTTIA_USER_ID }}
           SPORTTIA_USER_NAME: ${{ secrets.SPORTTIA_USER_NAME }}
-          SPORTTIA_SESSION_TOKEN: ${{ secrets.SPORTTIA_SESSION_TOKEN }}
+          SPORTTIA_LOGIN: ${{ secrets.SPORTTIA_LOGIN }}
+          SPORTTIA_PASSWORD: ${{ secrets.SPORTTIA_PASSWORD }}
           BOOKING_POLL_INTERVAL_MS: "15000"
           BOOKING_POLL_MAX_DURATION_MS: "5100000" # ~85 minutes, from 06:50 to 08:15 UTC
         run: node index.js --auto-book
