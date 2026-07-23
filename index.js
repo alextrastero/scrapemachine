@@ -15,18 +15,12 @@ const config = {
   baseApiUrl: 'https://api.sporttia.com/v7/timetable', // Base API URL
   facilityId: 3418, // Facility ID (idSC parameter)
   whitelistFacilities: [
+    'Pista cristal nueva 4',
+    'Pista Cristal 3',
     'Pista 1',
-    'Pista 2',
-    'Pista Cristal',
-    // 'Pista San Pablo',
   ],
   whitelistedStartTimes: [
-    '19:00',
-    '19:30',
     '20:30',
-    '21:00',
-    '22:00',
-    // '22:30',
   ],
   email: {
     service: 'gmail', // Email service (hardcoded)
@@ -36,6 +30,16 @@ const config = {
     },
     from: 'doesntmatter@gmail.com', // Hardcoded sender
     to: process.env.EMAIL_USER, // Hardcoded recipient
+  },
+  booking: {
+    windowDays: parseInt(process.env.BOOKING_WINDOW_DAYS, 10) || 7, // how many days ahead the booking window opens
+    releaseHour: parseInt(process.env.BOOKING_RELEASE_HOUR, 10) || 9, // hour (local time) the window is assumed to flip FREE, adjust once known
+    apiRoot: 'https://api.sporttia.com/v7',
+    userId: parseInt(process.env.SPORTTIA_USER_ID, 10),
+    userName: process.env.SPORTTIA_USER_NAME,
+    sessionToken: process.env.SPORTTIA_SESSION_TOKEN, // _play-session-token cookie value
+    pollIntervalMs: parseInt(process.env.BOOKING_POLL_INTERVAL_MS, 10) || 10000, // how often to re-check while polling
+    pollMaxDurationMs: parseInt(process.env.BOOKING_POLL_MAX_DURATION_MS, 10) || 20 * 60 * 1000, // give up after this long
   }
 };
 
@@ -48,6 +52,114 @@ const transporter = nodemailer.createTransport({
 // Helper function to format date as YYYY-MM-DD
 function formatDate(date) {
   return date.toISOString().split('T')[0];
+}
+
+// Picks the best FREE slot for a single date's timetable columns, ranked by
+// config.whitelistedStartTimes order first, then config.whitelistFacilities order.
+// Returns { facilityName, pieceId, ini, end, price } or null if nothing matches.
+function findBestSlot(columns) {
+  for (const time of config.whitelistedStartTimes) {
+    for (const facilityName of config.whitelistFacilities) {
+      const column = columns.find(c => c.facility.name === facilityName);
+      if (!column) continue;
+
+      const piece = column.pieces.find(p => {
+        if (p.mark !== 'FREE') return false;
+        const startTimeObj = new Date(p.ini);
+        const startTime = `${startTimeObj.getHours().toString().padStart(2, '0')}:${startTimeObj.getMinutes().toString().padStart(2, '0')}`;
+        return startTime === time;
+      });
+
+      if (piece) {
+        return {
+          facilityName,
+          facilityId: column.facility.id,
+          pieceId: piece.id,
+          ini: piece.ini,
+          end: piece.end,
+          price: piece.price,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+// Auth headers for the authenticated Sporttia endpoints (fares, bookings, me)
+function bookingAuthHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'Cookie': `_play-session-token=${config.booking.sessionToken}`,
+  };
+}
+
+// Looks up the member ('Socios') rate id for a given facility + time range.
+// Required before booking, since the booking payload references this rate id.
+async function getMemberRate(idFacility, ini, end) {
+  const url = `${config.booking.apiRoot}/bookings/fares?ini=${ini}&end=${end}&idFacility=${idFacility}&idUser=${config.booking.userId}`;
+  const response = await axios.get(url, { headers: bookingAuthHeaders() });
+
+  const rate = response.data.fullRates
+    .flatMap(r => r.prices)
+    .find(p => p.name === 'Socios');
+
+  if (!rate) throw new Error('Socios rate not found in fares response');
+  return rate;
+}
+
+// Books a slot returned by findBestSlot(). Real side effect: creates an actual
+// reservation on the Sporttia account and (per the account's payment setup) a bill.
+async function bookSlot(slot) {
+  const rate = await getMemberRate(slot.facilityId, slot.ini, slot.end);
+
+  const payload = {
+    idFacility: slot.facilityId,
+    ini: slot.ini,
+    end: slot.end,
+    individual: false,
+    idUser: config.booking.userId,
+    name: config.booking.userName,
+    occupants: [
+      { idUser: config.booking.userId, idBoleto: null, rate: [{ id: rate.id, duration: rate.duration }] }
+    ],
+    isWithinGameCancellationPeriod: false,
+    paymentForm: '',
+  };
+
+  const response = await axios.post(`${config.booking.apiRoot}/bookings`, payload, { headers: bookingAuthHeaders() });
+  return response.data;
+}
+
+// Emails a success/failure/no-match notification for an auto-book run.
+// Respects the global --dry-run flag (logs instead of sending).
+async function notifyBookingResult({ success, slot, result, error }) {
+  const bookingId = result?.booking?.id ?? result?.id;
+
+  const subject = success
+    ? `Booked: ${slot.facilityName} at ${slot.ini}`
+    : slot
+      ? `Auto-book FAILED for ${slot.facilityName} at ${slot.ini}`
+      : 'Auto-book: no matching slot found';
+
+  const html = success
+    ? `<p>Booked <strong>${slot.facilityName}</strong> at ${slot.ini} for €${slot.price}.</p><p>Booking id: ${bookingId}</p>`
+    : slot
+      ? `<p>Found <strong>${slot.facilityName}</strong> at ${slot.ini} but booking failed: ${error?.message || 'unknown error'}</p>`
+      : '<p>No matching FREE slot appeared for the target date within the polling window.</p>';
+
+  const mailOptions = { from: config.email.from, to: config.email.to, subject, html };
+
+  if (isDryRun) {
+    console.log('[dry-run] Would send notification email:', subject);
+    return;
+  }
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Notification email sent:', info.messageId);
+  } catch (mailError) {
+    console.error('Error sending notification email:', mailError.message);
+  }
 }
 
 // Function to fetch tournament table data
@@ -307,8 +419,95 @@ async function sendEmail(content, slotCount, tournamentData = '') {
   }
 }
 
+// Dry-run: fetch the target booking-window date and log which slot findBestSlot would pick
+async function findSlotDryRun() {
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() + config.booking.windowDays);
+  const formattedDate = formatDate(targetDate);
+
+  const apiUrl = `${config.baseApiUrl}?idSC=${config.facilityId}&date=${formattedDate}&weekly=false`;
+  console.log(`Checking ${formattedDate} (today + ${config.booking.windowDays} days): ${apiUrl}`);
+
+  const response = await axios.get(apiUrl);
+  const columns = response.data.one.columns;
+  const slot = findBestSlot(columns);
+
+  if (slot) {
+    console.log(`Would book: ${slot.facilityName} at ${slot.ini} (piece id ${slot.pieceId}, price ${slot.price})`);
+  } else {
+    console.log('No matching FREE slot found for this date yet.');
+  }
+}
+
+// Repeatedly checks the target date until a whitelisted slot goes FREE, then books it
+// (unless dryRun is true, in which case it reports the match without calling bookSlot).
+async function pollAndBook({ dryRun = false } = {}) {
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() + config.booking.windowDays);
+  const formattedDate = formatDate(targetDate);
+  const apiUrl = `${config.baseApiUrl}?idSC=${config.facilityId}&date=${formattedDate}&weekly=false`;
+
+  const deadline = Date.now() + config.booking.pollMaxDurationMs;
+  console.log(`Polling ${formattedDate} (dryRun=${dryRun}) every ${config.booking.pollIntervalMs}ms until ${new Date(deadline).toISOString()}`);
+
+  while (Date.now() < deadline) {
+    let slot = null;
+    try {
+      const response = await axios.get(apiUrl);
+      slot = findBestSlot(response.data.one.columns);
+    } catch (error) {
+      console.error('Error checking availability:', error.message);
+    }
+
+    if (slot) {
+      console.log(`Match found: ${slot.facilityName} at ${slot.ini} (piece id ${slot.pieceId}, price ${slot.price})`);
+
+      if (dryRun) {
+        console.log('Dry run - not booking.');
+        return { slot, booked: false };
+      }
+
+      try {
+        const result = await bookSlot(slot);
+        const bookingId = result?.booking?.id ?? result?.id;
+        console.log(`Booked! booking id ${bookingId}`, JSON.stringify(result));
+        await notifyBookingResult({ success: true, slot, result });
+        return { slot, booked: true, result };
+      } catch (error) {
+        console.error('Booking attempt failed:', error.message);
+        await notifyBookingResult({ success: false, slot, error });
+        return { slot, booked: false, error };
+      }
+    }
+
+    await new Promise(resolve => setTimeout(resolve, config.booking.pollIntervalMs));
+  }
+
+  console.log('Polling window elapsed without finding a matching FREE slot.');
+  if (!dryRun) {
+    await notifyBookingResult({ success: false, slot: null });
+  }
+  return { slot: null, booked: false };
+}
+
+const isFindSlot = process.argv.includes('--find-slot');
+const isPollDryRun = process.argv.includes('--poll-dry-run');
+const isAutoBook = process.argv.includes('--auto-book');
+
 // For GitHub Actions, just run once
 (async () => {
+  if (isFindSlot) {
+    await findSlotDryRun();
+    return;
+  }
+  if (isPollDryRun) {
+    await pollAndBook({ dryRun: true });
+    return;
+  }
+  if (isAutoBook) {
+    await pollAndBook({ dryRun: isDryRun });
+    return;
+  }
   console.log(`Scraper started. Checking ${config.baseApiUrl}`);
   await scrapeWebsite();
   console.log('Scrape completed');

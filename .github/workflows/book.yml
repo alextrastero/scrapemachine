@@ -1,0 +1,37 @@
+name: Auto Book Court
+
+on:
+  schedule:
+    # 06:50 UTC covers both 9 AM CET (08:00 UTC, winter) and 9 AM CEST (07:00 UTC, summer)
+    # with margin on both sides in case the booking window's release time drifts.
+    - cron: "50 6 * * *"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  auto-book:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Poll and book the target slot
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASS }}
+          SPORTTIA_USER_ID: ${{ secrets.SPORTTIA_USER_ID }}
+          SPORTTIA_USER_NAME: ${{ secrets.SPORTTIA_USER_NAME }}
+          SPORTTIA_SESSION_TOKEN: ${{ secrets.SPORTTIA_SESSION_TOKEN }}
+          BOOKING_POLL_INTERVAL_MS: "15000"
+          BOOKING_POLL_MAX_DURATION_MS: "5100000" # ~85 minutes, from 06:50 to 08:15 UTC
+        run: node index.js --auto-book
