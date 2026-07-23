@@ -152,6 +152,14 @@ async function bookSlot(slot) {
   return response.data;
 }
 
+// Cancels a booking by id. Throws (with a clear API message) if it's already cancelled/missing.
+async function cancelBooking(bookingId) {
+  const response = await axios.delete(`${config.booking.apiRoot}/bookings/${bookingId}`, {
+    headers: bookingAuthHeaders(),
+  });
+  return response.data;
+}
+
 // Emails a success/failure/no-match notification for an auto-book run.
 // Respects the global --dry-run flag (logs instead of sending).
 async function notifyBookingResult({ success, slot, result, error }) {
@@ -531,9 +539,23 @@ const isFindSlot = process.argv.includes("--find-slot");
 const isPollDryRun = process.argv.includes("--poll-dry-run");
 const isAutoBook = process.argv.includes("--auto-book");
 const isTestLogin = process.argv.includes("--test-login");
+const cancelFlagIndex = process.argv.indexOf("--cancel");
+const cancelBookingId = cancelFlagIndex !== -1 ? process.argv[cancelFlagIndex + 1] : null;
 
 // For GitHub Actions, just run once
 (async () => {
+  if (cancelBookingId) {
+    if (config.booking.login && config.booking.password) {
+      config.booking.sessionToken = await login();
+    }
+    try {
+      const result = await cancelBooking(cancelBookingId);
+      console.log(`Cancelled booking ${cancelBookingId}.`, JSON.stringify(result));
+    } catch (error) {
+      console.error(`Failed to cancel booking ${cancelBookingId}:`, error.response?.data?.error?.msg || error.message);
+    }
+    return;
+  }
   if (isTestLogin) {
     const token = await login();
     console.log(`Login OK. Token received (length ${token.length}).`);
